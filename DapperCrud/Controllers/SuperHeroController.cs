@@ -1,5 +1,6 @@
 ﻿using Dapper;
 using DapperCrud.Model;
+using DapperCrud.Repositories;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using System.Data.SqlClient;
@@ -11,54 +12,47 @@ namespace DapperCrud.Controllers
     public class SuperHeroController : ControllerBase
     {
         private readonly IConfiguration _configuration;
-        public SuperHeroController(IConfiguration configuration)
+        private readonly ISuperHeroRepository _superHeroRepository;
+
+        public SuperHeroController(IConfiguration configuration, ISuperHeroRepository superHeroRepository)
         {
             _configuration = configuration;
+            _superHeroRepository = superHeroRepository;
         }
 
         [HttpGet]
         public async Task<ActionResult<List<SuperHero>>> GetAllSuperheroes()
         {
-            using var connection = new SqlConnection(_configuration.GetConnectionString("DefaultConnection"));
-            var heroes = await connection.QueryAsync<SuperHero>("select *from superheroes");
+            var heroes = await _superHeroRepository.GetAll();
             return Ok(heroes);
         }
 
         [HttpGet("{heroId}")]
         public async Task<ActionResult<List<SuperHero>>> GetHeroById(int heroId)
         {
-            using var connection = new SqlConnection(_configuration.GetConnectionString("DefaultConnection"));
-            var heroes = await connection.QueryFirstAsync<SuperHero>("select *from superheroes where id = @id", new {id = heroId });
+            var heroes = await _superHeroRepository.Get(heroId);
             return Ok(heroes);
         }
 
         [HttpPost]
         public async Task<ActionResult<SuperHero>> CreateHero(SuperHero hero)
         {
-            using var connection = new SqlConnection(_configuration.GetConnectionString("DefaultConnection"));
-            await connection.ExecuteAsync("insert into superheroes (name, firstname, lastname, place) values (@Name, @FirstName, @LastName, @Place)", hero);
-            return Ok(await SelectAllSuperHeroes(connection));
+            var heroes = await _superHeroRepository.Create(hero);
+            return Ok(heroes);
         }
 
         [HttpPut]
         public async Task<ActionResult<SuperHero>> UpdateHero(SuperHero hero)
         {
-            using var connection = new SqlConnection(_configuration.GetConnectionString("DefaultConnection"));
-            await connection.ExecuteAsync("update superheroes set name = @Name, firstName = @FirstName, lastname = @LastName, place = @Place where id = @Id", hero);
-            return Ok(await SelectAllSuperHeroes(connection));
+            var heroes = await _superHeroRepository.Update(hero);
+            return Ok(heroes);
         }
 
         [HttpDelete("{heroId}")]
         public async Task<ActionResult<SuperHero>> DeleteHero(int heroId)
         {
-            using var connection = new SqlConnection(_configuration.GetConnectionString("DefaultConnection"));
-            await connection.ExecuteAsync("delete from superheroes where id = @Id",  new { Id = heroId });
-            return Ok(await SelectAllSuperHeroes(connection));
-        }
-
-        private static async Task<IEnumerable<SuperHero>> SelectAllSuperHeroes(SqlConnection connection)
-        {
-            return await connection.QueryAsync<SuperHero>("select *from superheroes");
+            var heroes = await _superHeroRepository.Delete(heroId);
+            return Ok(heroes);
         }
     }
 }
