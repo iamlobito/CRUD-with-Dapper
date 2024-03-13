@@ -2,16 +2,22 @@
 using Microsoft.Extensions.Configuration;
 using System.Data.SqlClient;
 using Dapper;
+using Microsoft.Extensions.Caching.Distributed;
+using System.Text.Json.Serialization;
+using Newtonsoft.Json;
+
 namespace DapperCrud.Repositories
 {
     public class SuperHeroRepository : ISuperHeroRepository
     {
         private readonly ISqlConnectionFactory _sqlConnectionFactory;
+        private readonly IDistributedCache _distributedCache;
 
 
-        public SuperHeroRepository(ISqlConnectionFactory sqlConnectionFactory)
+        public SuperHeroRepository(ISqlConnectionFactory sqlConnectionFactory, IDistributedCache distributedCache)
         {
             _sqlConnectionFactory = sqlConnectionFactory;
+            _distributedCache = distributedCache;
         }
 
         public async Task<IEnumerable<SuperHero>> Create(SuperHero hero)
@@ -30,8 +36,31 @@ namespace DapperCrud.Repositories
 
         public async Task<SuperHero> Get(int heroId)
         {
+            string cacheKey = $"hero-{heroId}";
+
+            string? cacheHero = await _distributedCache.GetStringAsync(cacheKey);
+
             await using SqlConnection sqlConnection = _sqlConnectionFactory.CreateSqlConnection();
-            return await sqlConnection.QueryFirstAsync<SuperHero>("select *from superheroes where id = @id", new { id = heroId });
+
+            SuperHero? hero;
+            if (String.IsNullOrEmpty(cacheHero))
+            {
+                
+                hero = await sqlConnection.QueryFirstAsync<SuperHero>("select *from superheroes where id = @id", new { id = heroId });
+
+                if (hero is null)
+                {
+                    return hero;
+                }
+
+                await _distributedCache.SetStringAsync(cacheKey, JsonConvert.SerializeObject(hero));
+
+                return hero;
+            }
+
+            hero = JsonConvert.DeserializeObject<SuperHero>(cacheHero);
+
+            return hero;
         }
 
         public async Task<IEnumerable<SuperHero>> GetAll()
